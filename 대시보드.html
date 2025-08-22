@@ -121,7 +121,7 @@
                         </div>
                     </div>
                     <div class="bg-white p-6 rounded-lg shadow-md">
-                        <h2 class="text-xl font-bold mb-4 text-[#5d4037]">상위 5개 콘텐츠 (세션 수 기준)</h2>
+                        <h2 class="text-xl font-bold mb-4 text-[#5d4037]">상위 5개 콘텐츠 (횟수 기준)</h2>
                         <div class="chart-container h-[45vh] max-h-[450px]">
                             <canvas id="topContentsChart"></canvas>
                         </div>
@@ -139,7 +139,7 @@
                                     <tr>
                                         <th scope="col" class="px-6 py-3">강사명</th>
                                         <th scope="col" class="px-6 py-3 text-right">총 시간</th>
-                                        <th scope="col" class="px-6 py-3 text-right">총 세션</th>
+                                        <th scope="col" class="px-6 py-3 text-right">총 횟수</th>
                                     </tr>
                                 </thead>
                                 <tbody id="instructorTableBody">
@@ -156,7 +156,7 @@
                                     <p id="instructorDetailHours" class="text-2xl font-bold"></p>
                                 </div>
                                 <div class="bg-[#f5f5f5] p-4 rounded-lg">
-                                    <h3 class="font-semibold text-gray-600">총 강의 세션</h3>
+                                    <h3 class="font-semibold text-gray-600">총 강의 횟수</h3>
                                     <p id="instructorDetailSessions" class="text-2xl font-bold"></p>
                                 </div>
                             </div>
@@ -164,7 +164,7 @@
                             <div class="chart-container h-[30vh] max-h-[250px] mb-6">
                                 <canvas id="instructorContentChart"></canvas>
                             </div>
-                            <h3 class="text-lg font-bold mb-2 text-[#6d4c41]">참여 프로그램 분포 (세션 기준)</h3>
+                            <h3 class="text-lg font-bold mb-2 text-[#6d4c41]">참여 프로그램 분포 (횟수 기준)</h3>
                             <div class="chart-container h-[30vh] max-h-[250px]">
                                 <canvas id="instructorProgramChart"></canvas>
                             </div>
@@ -197,7 +197,7 @@
                                  <tr>
                                      <th scope="col" class="px-6 py-3">프로그램명</th>
                                      <th scope="col" class="px-6 py-3 text-right">총 시간</th>
-                                     <th scope="col" class="px-6 py-3 text-right">총 세션</th>
+                                     <th scope="col" class="px-6 py-3 text-right">총 횟수</th>
                                  </tr>
                              </thead>
                              <tbody id="programTableBody">
@@ -236,15 +236,31 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function processData(data) {
-        return data.map(row => ({
+        console.log('processData 시작:', data.length, '행');
+        console.log('첫 번째 행 샘플:', data[0]);
+        
+        const processed = data.map(row => ({
             ...row,
             '강의 시간': parseFloat(row['강의 시간']) || 0,
             '날짜': row['날짜'] ? new Date(row['날짜'].replace(/\.\s/g, '-')) : null
-        })).filter(row => row['강사명'] && row['날짜'] && !isNaN(row['날짜'].getTime()));
+        })).filter(row => {
+            const isValid = row['강사명'] && row['날짜'] && !isNaN(row['날짜'].getTime());
+            if (!isValid) {
+                console.log('필터링된 행:', row);
+            }
+            return isValid;
+        });
+        
+        console.log('처리 완료:', processed.length, '행');
+        console.log('처리된 첫 번째 행:', processed[0]);
+        return processed;
     }
 
     function updateDashboard() {
+        console.log('updateDashboard 호출됨, lectureData 길이:', lectureData.length);
+        
         if (lectureData.length === 0) {
+            console.log('데이터가 없음 - "데이터 없음" 표시');
             // 데이터가 없을 때 "데이터 없음" 표시
             document.getElementById('totalHours').textContent = '데이터 없음';
             document.getElementById('totalSessions').textContent = '데이터 없음';
@@ -259,20 +275,25 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        console.log('데이터가 있음 - KPI 업데이트 시작');
         const totalHours = lectureData.reduce((sum, row) => sum + row['강의 시간'], 0);
         const totalSessions = lectureData.length;
         const uniqueInstructors = new Set(lectureData.map(row => row['강사명']));
         const uniquePrograms = new Set(lectureData.map(row => row['프로그램명']));
+
+        console.log('계산된 값들:', { totalHours, totalSessions, uniqueInstructors: uniqueInstructors.size, uniquePrograms: uniquePrograms.size });
 
         document.getElementById('totalHours').textContent = totalHours.toFixed(1);
         document.getElementById('totalSessions').textContent = totalSessions;
         document.getElementById('totalInstructors').textContent = uniqueInstructors.size;
         document.getElementById('totalPrograms').textContent = uniquePrograms.size;
 
+        console.log('KPI 업데이트 완료, 차트 업데이트 시작');
         updateMonthlyTrendChart();
         updateTopCharts();
         updateInstructorSection();
         updateProgramSection();
+        console.log('대시보드 업데이트 완료');
     }
 
     function getAggregatedData(key) {
@@ -405,7 +426,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const totalSessions = instructorAllData.length;
 
         document.getElementById('instructorDetailHours').textContent = `${totalHours.toFixed(1)} 시간`;
-        document.getElementById('instructorDetailSessions').textContent = `${totalSessions} 세션`;
+        document.getElementById('instructorDetailSessions').textContent = `${totalSessions}회`;
 
         const contentAggregation = instructorAllData.reduce((acc, row) => {
             const content = row['담당 콘텐츠'];
@@ -521,7 +542,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         charts.instructorProgram = new Chart(document.getElementById('instructorProgramChart'), {
             type: 'bar', options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y' },
-            data: { datasets: [{ label: '세션 수', ...chartColors }] }
+            data: { datasets: [{ label: '횟수', ...chartColors }] }
         });
         charts.programHours = new Chart(document.getElementById('programHoursChart'), {
             type: 'bar', options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } },
@@ -542,13 +563,19 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         
+        console.log('파일 업로드 시작:', file.name, file.type);
+        
         const fileName = file.name.toLowerCase();
         if (fileName.endsWith('.csv')) {
             const reader = new FileReader();
             reader.onload = function(e) {
+                console.log('CSV 파일 읽기 완료');
                 const newCsvData = e.target.result;
+                console.log('CSV 데이터 샘플:', newCsvData.substring(0, 200));
                 const newData = parseCSV(newCsvData);
+                console.log('파싱된 데이터:', newData.length, '행');
                 const processedNewData = processData(newData);
+                console.log('처리된 데이터:', processedNewData.length, '행');
                 lectureData = processedNewData;
                 alert('CSV 데이터가 성공적으로 추가되었습니다. 대시보드를 업데이트합니다.');
                 updateDashboard();
@@ -557,11 +584,16 @@ document.addEventListener('DOMContentLoaded', () => {
         } else if (fileName.endsWith('.xlsx') || fileName.endsWith('.xls')) {
             const reader = new FileReader();
             reader.onload = function(e) {
+                console.log('Excel 파일 읽기 완료');
                 const data = new Uint8Array(e.target.result);
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheetName = workbook.SheetNames[0];
+                console.log('시트 이름:', firstSheetName);
                 const worksheet = workbook.Sheets[firstSheetName];
                 const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: '' });
+                console.log('Excel에서 추출된 데이터:', jsonData.length, '행');
+                console.log('첫 번째 행 샘플:', jsonData[0]);
+                
                 // jsonData의 키를 CSV와 맞추기 위해 트림
                 const normalizedData = jsonData.map(row => {
                     const obj = {};
@@ -570,7 +602,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
                     return obj;
                 });
+                console.log('정규화된 데이터:', normalizedData.length, '행');
+                console.log('정규화된 첫 번째 행:', normalizedData[0]);
+                
                 const processedNewData = processData(normalizedData);
+                console.log('최종 처리된 데이터:', processedNewData.length, '행');
                 lectureData = processedNewData;
                 alert('엑셀 데이터가 성공적으로 추가되었습니다. 대시보드를 업데이트합니다.');
                 updateDashboard();
