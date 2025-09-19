@@ -83,6 +83,7 @@
             <button class="nav-btn active flex-1 py-2 px-4 rounded-md text-center" data-target="dashboard">종합 현황</button>
             <button class="nav-btn flex-1 py-2 px-4 rounded-md text-center" data-target="instructors">강사별 분석</button>
             <button class="nav-btn flex-1 py-2 px-4 rounded-md text-center" data-target="programs">프로그램 & 콘텐츠</button>
+            <button class="nav-btn flex-1 py-2 px-4 rounded-md text-center" data-target="equipment">장비별 분석</button>
         </nav>
 
         <main>
@@ -188,6 +189,42 @@
                         </div>
                     </div>
                  </div>
+            </section>
+
+            <section id="equipment" class="content-section hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-xl font-bold mb-4 text-[#5d4037]">장비별 활용 횟수 (상위 10개)</h2>
+                        <div class="chart-container h-[50vh] max-h-[500px]">
+                            <canvas id="equipmentUsageChart"></canvas>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-xl font-bold mb-4 text-[#5d4037]">장비별 총 강의 시간 (상위 10개)</h2>
+                        <div class="chart-container h-[50vh] max-h-[500px]">
+                            <canvas id="equipmentHoursChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-bold mb-4 text-[#5d4037]">장비별 상세 분석</h2>
+                    <div class="table-container">
+                        <table class="w-full text-sm text-left">
+                            <thead class="text-xs text-[#6d4c41] uppercase bg-[#efebe9] sticky top-0">
+                                <tr>
+                                    <th scope="col" class="px-6 py-3 cursor-pointer hover:bg-[#d7ccc8]" onclick="sortTable('equipmentTable', 0)">장비명</th>
+                                    <th scope="col" class="px-6 py-3 text-right cursor-pointer hover:bg-[#d7ccc8]" onclick="sortTable('equipmentTable', 1)">활용 횟수</th>
+                                    <th scope="col" class="px-6 py-3 text-right cursor-pointer hover:bg-[#d7ccc8]" onclick="sortTable('equipmentTable', 2)">총 강의 시간</th>
+                                    <th scope="col" class="px-6 py-3 text-right cursor-pointer hover:bg-[#d7ccc8]" onclick="sortTable('equipmentTable', 3)">평균 강의 시간</th>
+                                    <th scope="col" class="px-6 py-3 text-center cursor-pointer hover:bg-[#d7ccc8]" onclick="sortTable('equipmentTable', 4)">담당 강사 수</th>
+                                </tr>
+                            </thead>
+                            <tbody id="equipmentTableBody">
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </section>
         </main>
     </div>
@@ -1109,6 +1146,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateTopCharts();
         updateInstructorSection();
         updateProgramSection();
+        updateEquipmentSection();
     }
 
     function getAggregatedData(key) {
@@ -1234,6 +1272,61 @@ document.addEventListener('DOMContentLoaded', () => {
         charts.contentHours.update();
     }
 
+    function updateEquipmentSection() {
+        const equipmentData = getAggregatedData('장비명').filter(item => item.name && item.name.trim() !== '');
+        
+        // 상위 10개 장비별 활용 횟수 차트
+        const topUsageData = equipmentData.sort((a, b) => b.sessions - a.sessions).slice(0, 10);
+        charts.equipmentUsage.data.labels = topUsageData.map(d => d.name);
+        charts.equipmentUsage.data.datasets[0].data = topUsageData.map(d => d.sessions);
+        charts.equipmentUsage.update();
+
+        // 상위 10개 장비별 총 강의 시간 차트
+        const topHoursData = equipmentData.sort((a, b) => b.hours - a.hours).slice(0, 10);
+        charts.equipmentHours.data.labels = topHoursData.map(d => d.name);
+        charts.equipmentHours.data.datasets[0].data = topHoursData.map(d => d.hours);
+        charts.equipmentHours.update();
+
+        // 장비별 상세 테이블 업데이트
+        updateEquipmentTable(equipmentData);
+    }
+
+    function updateEquipmentTable(equipmentData) {
+        const tableBody = document.getElementById('equipmentTableBody');
+        tableBody.innerHTML = '';
+        
+        // 각 장비별로 담당 강사 수 계산
+        const equipmentWithInstructors = equipmentData.map(equipment => {
+            const instructors = new Set();
+            lectureData.forEach(row => {
+                if (row['장비명'] === equipment.name) {
+                    instructors.add(row['강사명']);
+                }
+            });
+            return {
+                ...equipment,
+                instructorCount: instructors.size,
+                avgHours: equipment.sessions > 0 ? (equipment.hours / equipment.sessions).toFixed(1) : 0
+            };
+        });
+
+        // 총 강의 시간 기준으로 정렬
+        equipmentWithInstructors.sort((a, b) => b.hours - a.hours);
+
+        equipmentWithInstructors.forEach(equipment => {
+            const row = document.createElement('tr');
+            row.className = 'bg-white border-b hover:bg-gray-50';
+            row.innerHTML = `
+                <td class="px-6 py-4 font-medium whitespace-nowrap">${equipment.name}</td>
+                <td class="px-6 py-4 text-right">${equipment.sessions}</td>
+                <td class="px-6 py-4 text-right">${equipment.hours.toFixed(1)}</td>
+                <td class="px-6 py-4 text-right">${equipment.avgHours}</td>
+                <td class="px-6 py-4 text-center">${equipment.instructorCount}</td>
+            `;
+            tableBody.appendChild(row);
+        });
+    }
+
     function initializeCharts() {
         charts.monthlyTrend = new Chart(document.getElementById('monthlyTrendChart'), {
             type: 'line', options: { responsive: true, maintainAspectRatio: false }
@@ -1259,6 +1352,14 @@ document.addEventListener('DOMContentLoaded', () => {
             data: { datasets: [{ label: '총 강의 시간', ...chartColors }] }
         });
         charts.contentHours = new Chart(document.getElementById('contentHoursChart'), {
+            type: 'bar', options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } },
+            data: { datasets: [{ label: '총 강의 시간', ...chartColors }] }
+        });
+        charts.equipmentUsage = new Chart(document.getElementById('equipmentUsageChart'), {
+            type: 'doughnut', options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right' } } },
+            data: { datasets: [{ label: '활용 횟수', ...chartColors }] }
+        });
+        charts.equipmentHours = new Chart(document.getElementById('equipmentHoursChart'), {
             type: 'bar', options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } } },
             data: { datasets: [{ label: '총 강의 시간', ...chartColors }] }
         });
@@ -1337,6 +1438,31 @@ document.addEventListener('DOMContentLoaded', () => {
         initializeCharts();
         updateDashboard();
     }
+
+    // 테이블 정렬 함수
+    window.sortTable = function(tableId, columnIndex) {
+        const table = document.getElementById(tableId);
+        const tbody = table.querySelector('tbody');
+        const rows = Array.from(tbody.querySelectorAll('tr'));
+        
+        const isNumeric = columnIndex === 1 || columnIndex === 2 || columnIndex === 3 || columnIndex === 4;
+        
+        rows.sort((a, b) => {
+            const aValue = a.cells[columnIndex].textContent.trim();
+            const bValue = b.cells[columnIndex].textContent.trim();
+            
+            if (isNumeric) {
+                const aNum = parseFloat(aValue) || 0;
+                const bNum = parseFloat(bValue) || 0;
+                return bNum - aNum; // 내림차순 정렬
+            } else {
+                return aValue.localeCompare(bValue); // 오름차순 정렬
+            }
+        });
+        
+        // 정렬된 행들을 다시 테이블에 추가
+        rows.forEach(row => tbody.appendChild(row));
+    };
 
     init();
 });
