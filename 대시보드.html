@@ -58,6 +58,45 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #a1887f;
         }
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-overlay.active {
+            display: flex;
+        }
+        .lock-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: #8d6e63;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 52px;
+            height: 52px;
+            font-size: 22px;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            z-index: 999;
+            transition: background 0.2s;
+        }
+        .lock-btn:hover { background: #6d4c41; }
+        .anon-badge {
+            display: inline-block;
+            background: #efebe9;
+            color: #8d6e63;
+            font-size: 12px;
+            padding: 2px 10px;
+            border-radius: 999px;
+            margin-left: 8px;
+            vertical-align: middle;
+        }
     </style>
 </head>
 <body class="text-[#3e2723]">
@@ -65,7 +104,7 @@
     <div class="container mx-auto p-4 md:p-8">
         <header class="mb-8 text-center">
             <h1 class="text-4xl font-bold text-[#5d4037] mb-2">2025년 강사 성과 분석 대시보드</h1>
-            <p class="text-lg text-[#6d4c41]">데이터 기반 운영 현황 및 인사이트</p>
+            <p class="text-lg text-[#6d4c41]">데이터 기반 운영 현황 및 인사이트 <span id="anonBadge" class="anon-badge">익명 보기</span></p>
         </header>
 
         <div class="bg-white p-4 rounded-lg shadow-md mb-8 flex flex-col md:flex-row items-center justify-between gap-4">
@@ -1101,6 +1140,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let lectureData = [];
     let charts = {};
+    let isAuthenticated = false;
+    const PASSWORD = '0627';
+
+    // 강사명 익명화 맵 생성
+    function buildAnonMap(data) {
+        const names = [...new Set(data.map(r => r['강사명']))].sort();
+        const map = {};
+        names.forEach((name, i) => {
+            map[name] = `강사 ${i + 1}`;
+        });
+        return map;
+    }
+
+    function anonymizeData(data) {
+        const anonMap = buildAnonMap(data);
+        return data.map(row => ({ ...row, '강사명': anonMap[row['강사명']] || row['강사명'] }));
+    }
 
     const chartColors = {
         backgroundColor: ['#d7ccc8', '#bcaaa4', '#a1887f', '#8d6e63', '#795548', '#6d4c41', '#5d4037', '#4e342e', '#3e2723'],
@@ -1432,11 +1488,32 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    function init() {
-        const initialData = parseCSV(initialCSVData);
-        lectureData = processData(initialData);
-        initializeCharts();
+    const DRIVE_CSV_URL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSRcaoTMuOuNxKS29hCgIada59jPPI1PEcOPG7GG2wCUoBpUnTI5atrMkxftizyruZlxJjqiPjGMsD9/pub?gid=466808904&single=true&output=csv';
+    let rawProcessedData = [];
+
+    function loadData(csvText) {
+        const parsed = parseCSV(csvText);
+        rawProcessedData = processData(parsed);
+        lectureData = isAuthenticated ? rawProcessedData : anonymizeData(rawProcessedData);
         updateDashboard();
+    }
+
+    function init() {
+        initializeCharts();
+        // 구글 드라이브 CSV 로드
+        fetch(DRIVE_CSV_URL)
+            .then(res => {
+                if (!res.ok) throw new Error('fetch failed');
+                return res.text();
+            })
+            .then(csvText => {
+                loadData(csvText);
+            })
+            .catch(() => {
+                // 드라이브 실패 시 하드코딩 데이터 폴백
+                console.warn('드라이브 CSV 로드 실패, 기본 데이터 사용');
+                loadData(initialCSVData);
+            });
     }
 
     // 테이블 정렬 함수
@@ -1464,8 +1541,75 @@ document.addEventListener('DOMContentLoaded', () => {
         rows.forEach(row => tbody.appendChild(row));
     };
 
+    // 비밀번호 모달 로직
+    const lockBtn = document.getElementById('lockBtn');
+    const modalOverlay = document.getElementById('modalOverlay');
+    const pwInput = document.getElementById('pwInput');
+    const pwConfirm = document.getElementById('pwConfirm');
+    const pwError = document.getElementById('pwError');
+    const anonBadge = document.getElementById('anonBadge');
+
+    lockBtn.addEventListener('click', () => {
+        if (isAuthenticated) {
+            // 잠금: 다시 익명화
+            isAuthenticated = false;
+            lectureData = anonymizeData(rawProcessedData);
+            updateDashboard();
+            lockBtn.textContent = '🔒';
+            anonBadge.style.display = 'inline-block';
+        } else {
+            pwInput.value = '';
+            pwError.style.display = 'none';
+            modalOverlay.classList.add('active');
+            pwInput.focus();
+        }
+    });
+
+    modalOverlay.addEventListener('click', (e) => {
+        if (e.target === modalOverlay) modalOverlay.classList.remove('active');
+    });
+
+    pwConfirm.addEventListener('click', () => {
+        if (pwInput.value === PASSWORD) {
+            isAuthenticated = true;
+            modalOverlay.classList.remove('active');
+            lectureData = rawProcessedData;
+            updateDashboard();
+            lockBtn.textContent = '🔓';
+            anonBadge.style.display = 'none';
+        } else {
+            pwError.style.display = 'block';
+            pwInput.value = '';
+            pwInput.focus();
+        }
+    });
+
+    pwInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') pwConfirm.click();
+    });
+
     init();
 });
 </script>
+
+<!-- 비밀번호 모달 -->
+<div id="modalOverlay" class="modal-overlay">
+    <div class="bg-white rounded-2xl shadow-xl p-8 w-80 text-center">
+        <div class="text-4xl mb-4">🔒</div>
+        <h2 class="text-xl font-bold text-[#5d4037] mb-2">실명 데이터 보기</h2>
+        <p class="text-sm text-[#8d6e63] mb-6">비밀번호를 입력하세요</p>
+        <input id="pwInput" type="password" placeholder="비밀번호"
+            class="w-full border border-[#d7ccc8] rounded-lg px-4 py-3 text-center text-lg mb-3 focus:outline-none focus:border-[#8d6e63]" />
+        <p id="pwError" style="display:none" class="text-red-500 text-sm mb-3">비밀번호가 틀렸어요.</p>
+        <button id="pwConfirm"
+            class="w-full bg-[#8d6e63] text-white font-bold py-3 rounded-lg hover:bg-[#6d4c41] transition-colors">
+            확인
+        </button>
+    </div>
+</div>
+
+<!-- 자물쇠 버튼 -->
+<button id="lockBtn" class="lock-btn">🔒</button>
+
 </body>
 </html>
